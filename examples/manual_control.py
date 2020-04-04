@@ -47,7 +47,7 @@ from __future__ import print_function
 # ==============================================================================
 # -- find carla module ---------------------------------------------------------
 # ==============================================================================
-
+from sklearn.cluster import KMeans
 import cv2
 import glob
 import os
@@ -131,10 +131,40 @@ enable_edges = False
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
+import numpy as np
+def cart2pol(x1,y1,x2,y2):
+    #y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
+    # (y1-y2)*x + (x2-x1)*y - y1(x2-x1)+x1(y2-y1) = 0 cf. Ax+By+C=0
+    # Normal distance from origing rho = (A.0 + B.0 +C)/sqrt(A**2+B**2) = (-y1*(x2-x1)+x1*(y2-y1))/sqrt((y2-y1)**2 + (x2-x1)**2)
+    # Slope of the normal will be theta = pi/2-arctan((y2-y1)/(x2-x1))
+    rho = (-y1*(x2-x1)+x1*(y2-y1))/np.sqrt((y2-y1)**2+(x2-x1)**2)
+    theta = np.arctan((y2-y1)/(x2-x1)) - np.pi/2 
+
+    return rho,theta
+
+
+def normalize_params(rho, theta, w, h):
+    normalized_theta = (theta + np.pi) / np.pi
+    normalized_rho = rho/(np.sqrt(w**2+h**2)) + 1
+
+    return normalized_rho, normalized_theta
+
+
+def cluster_edges(lines,w,h):
+    lines_parametric = map(lambda l: normalize_params(*cart2pol(*l),w,h))
+    kmeans = KMeans(random_state=0)
+    kmeans.fit(lines_parametric)
+    return kmeans.labels_
+    
+
+
 def detect_edges(img):
   img_low_pass = cv2.GaussianBlur(img,(3,3),0)
   img_canny = cv2.Canny(img_low_pass,100,200)
-  lines = cv2.HoughLinesP(image=img_canny, rho=3,theta=np.pi/36.0,
+  ROI_mask = np.zeros_like(img_canny)
+  ROI_mask[int(len(ROI_mask)//3):] = 1
+  img_canny_with_ROI = np.multiply(img_canny,ROI_mask)
+  lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
           lines=None, threshold=20, minLineLength=0, maxLineGap=3)
 
 
