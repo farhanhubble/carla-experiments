@@ -169,20 +169,13 @@ def detect_edges(img):
 
 
   #print('Plotting ', len(lines), ' lines.')
-  img_lines = np.zeros_like(img_canny)
+  img_lines = np.zeros_like(img)
   for i in range(len(lines)):
     for x1,y1,x2,y2 in lines[i]:
         cv2.line(img_lines,(x1,y1),(x2,y2),(255,255,255),2)
 
-  mask = np.zeros_like(img)
-  #print(mask.shape)
-  #print(img.shape)
 
-  mask[:,:,0] = img_lines
-  mask[:, :, 1] = img_lines
-  mask[:, :, 2] = img_lines
-
-  res = cv2.addWeighted(img, 1, mask, 1, 0)
+  res = cv2.addWeighted(img, 1, img_lines, 1, 0)
   return res
 
 def find_weather_presets():
