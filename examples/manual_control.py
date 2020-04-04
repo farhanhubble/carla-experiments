@@ -111,6 +111,7 @@ try:
     from pygame.locals import K_w
     from pygame.locals import K_MINUS
     from pygame.locals import K_EQUALS
+    from pygame.locals import K_z
 except ImportError:
     raise RuntimeError('cannot import pygame, make sure pygame package is installed')
 
@@ -119,6 +120,13 @@ try:
 except ImportError:
     raise RuntimeError('cannot import numpy, make sure numpy package is installed')
 
+
+
+# ==============================================================================
+# -- Global Flag ----------------------------------------------------------
+# ==============================================================================
+
+enable_edges = False
 
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
@@ -130,12 +138,22 @@ def detect_edges(img):
           lines=None, threshold=20, minLineLength=0, maxLineGap=3)
 
 
-  print('Plotting ', len(lines), ' lines.')
+  #print('Plotting ', len(lines), ' lines.')
   img_lines = np.zeros_like(img_canny)
   for i in range(len(lines)):
     for x1,y1,x2,y2 in lines[i]:
         cv2.line(img_lines,(x1,y1),(x2,y2),(255,255,255),2)
-  return img_lines
+
+  mask = np.zeros_like(img)
+  #print(mask.shape)
+  #print(img.shape)
+
+  mask[:,:,0] = img_lines
+  mask[:, :, 1] = img_lines
+  mask[:, :, 2] = img_lines
+
+  res = cv2.addWeighted(img, 1, mask, 1, 0)
+  return res
 
 def find_weather_presets():
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
@@ -331,6 +349,13 @@ class KeyboardControl(object):
                         self._autopilot_enabled = not self._autopilot_enabled
                         world.player.set_autopilot(self._autopilot_enabled)
                         world.hud.notification('Autopilot %s' % ('On' if self._autopilot_enabled else 'Off'))
+
+                    elif event.key == K_z:
+                        global enable_edges
+                        if not enable_edges:
+                            enable_edges = True
+                        else:
+                            enable_edges = False
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
                 self._parse_vehicle_keys(pygame.key.get_pressed(), clock.get_time())
@@ -735,6 +760,7 @@ class CameraManager(object):
 
     @staticmethod
     def _parse_image(weak_self, image):
+        global enable_edges
         self = weak_self()
         if not self:
             return
@@ -757,7 +783,9 @@ class CameraManager(object):
             array = np.reshape(array, (image.height, image.width, 4))
             array = array[:, :, :3]
             array = array[:, :, ::-1]
-            array = detect_edges(array)
+
+            if enable_edges:
+                array = detect_edges(array)
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame_number)
