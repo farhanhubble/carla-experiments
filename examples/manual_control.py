@@ -158,21 +158,39 @@ def cluster_edges(lines,w,h):
     
 
 
+
 def detect_edges(img):
   img_low_pass = cv2.GaussianBlur(img,(3,3),0)
   img_canny = cv2.Canny(img_low_pass,100,200)
-  ROI_mask = np.zeros_like(img_canny)
-  ROI_mask[int(len(ROI_mask)//3):] = 1
-  img_canny_with_ROI = np.multiply(img_canny,ROI_mask)
+  height, width = img.shape[0], img.shape[1]
+  center_y = int(width // 2)
+  extent_bottom = (center_y-int(width*0.45), center_y+int(width*0.45)) 
+  extent_top    = (center_y-int(width*0.1), center_y+int(width*0.1)) 
+  ROI_xs = [extent_top[0], extent_bottom[0], extent_bottom[1], extent_top[1]]
+  ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
+  ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
+  ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
+  ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
+
+  ROI_mask = np.ones_like(img_canny)
+  #ROI_mask[int(len(ROI_mask)//3):] = 1
+  cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
+  img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
   lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
           lines=None, threshold=20, minLineLength=0, maxLineGap=3)
 
-
-  #print('Plotting ', len(lines), ' lines.')
+  #print(ROI_segment_starts)
+  #print(ROI_segment_ends)
+  #print(list(ROI_segments),'\n')
+  
+  
   img_lines = np.zeros_like(img)
-  for i in range(len(lines)):
-    for x1,y1,x2,y2 in lines[i]:
-        cv2.line(img_lines,(x1,y1),(x2,y2),(255,255,255),2)
+  print('Plotting ', len(lines), ' lines.')
+  for [[x1,y1,x2,y2]] in lines:
+    cv2.line(img_lines,(x1,y1),(x2,y2),(255,255,255),2)
+  
+  for [start,end] in ROI_segments:
+    cv2.line(img_lines, start, end, (255,0,0) , 2)
 
 
   res = cv2.addWeighted(img, 1, img_lines, 1, 0)
