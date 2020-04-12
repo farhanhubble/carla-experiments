@@ -165,9 +165,9 @@ def detect_edges(img):
   height, width = img.shape[0], img.shape[1]
   center_y = int(width // 2)
   extent_bottom = (center_y-int(width*0.45), center_y+int(width*0.45)) 
-  extent_top    = (center_y-int(width*0.1), center_y+int(width*0.1)) 
+  extent_top    = (center_y-int(width*0.08), center_y+int(width*0.08)) 
   ROI_xs = [extent_top[0], extent_bottom[0], extent_bottom[1], extent_top[1]]
-  ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
+  ROI_ys = [int(0.5*height), height, height, int(0.5*height)]
   ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
   ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
   ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
@@ -177,7 +177,7 @@ def detect_edges(img):
   cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
   img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
   lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
-          lines=None, threshold=20, minLineLength=0, maxLineGap=3)
+          lines=None, threshold=20, minLineLength=5, maxLineGap=3)
 
   #print(ROI_segment_starts)
   #print(ROI_segment_ends)
@@ -193,7 +193,7 @@ def detect_edges(img):
     cv2.line(img_lines, start, end, (255,0,0) , 2)
 
 
-  res = cv2.addWeighted(img, 1, img_lines, 1, 0)
+  res = cv2.addWeighted(img, 0.8, img_lines, 0.2, 0)
   return res
 
 def find_weather_presets():
