@@ -135,12 +135,12 @@ enable_ROI = False
 # ==============================================================================
 import numpy as np
 def cart2pol(x1,y1,x2,y2):
-    #y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
+    # y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
     # (y1-y2)*x + (x2-x1)*y - y1(x2-x1)+x1(y2-y1) = 0 cf. Ax+By+C=0
     # Normal distance from origing rho = (A.0 + B.0 +C)/sqrt(A**2+B**2) = (-y1*(x2-x1)+x1*(y2-y1))/sqrt((y2-y1)**2 + (x2-x1)**2)
     # Slope of the normal will be theta = pi/2-arctan((y2-y1)/(x2-x1))
     rho = (-y1*(x2-x1)+x1*(y2-y1))/np.sqrt((y2-y1)**2+(x2-x1)**2)
-    theta = np.arctan((y2-y1)/(x2-x1)) - np.pi/2 
+    theta = np.arctan((y2-y1)/(x2-x1)) - np.pi/2 if x2 != x1 else 0 
 
     return rho,theta
 
@@ -153,7 +153,7 @@ def normalize_params(rho, theta, w, h):
 
 
 def cluster_edges(lines,w,h):
-    lines_parametric = map(lambda l: normalize_params(*cart2pol(*l),w=w, h=h))
+    lines_parametric = list(map(lambda l: normalize_params(*cart2pol(*l[0]),w=w, h=h),lines))
     kmeans = KMeans(random_state=0)
     kmeans.fit(lines_parametric)
     return kmeans.labels_
@@ -190,10 +190,25 @@ def detect_edges(img):
       # print(ROI_segment_starts)
       # print(ROI_segment_ends)
       # print(list(ROI_segments),'\n')
-
-      print('Plotting ', len(lines), ' lines.')
-      for [[x1, y1, x2, y2]] in lines:
-          cv2.line(img_lines, (x1, y1), (x2, y2), (255, 255, 255), 2)
+      _colors= [[255,0,0],       # red
+      [255,165,0],     # orange
+      [255,255,0],     # yellow
+      [0,255,0],       # green
+      [0,0,255],       # blue
+      [75,0,130],      # indigo
+      [238,130,238],   # violet
+      [0,0,0],         # black
+      [127,127,127],   # grey
+      [255,255,255]]   # white
+      if lines is not None:
+        cluster_ids = cluster_edges(lines, height, width)
+        print(len(set(cluster_ids)), 'clusters')
+        for cluster_id in set(cluster_ids):
+            print('Cluster',cluster_id,' has',np.sum(cluster_ids == cluster_id),' edges.')
+        for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
+              cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id] if cluster_id < len(_colors) else (255,255,255) , 2)
+               
+              
 
       for [start, end] in ROI_segments:
           cv2.line(img_lines, start, end, (255, 0, 0), 2)
@@ -209,6 +224,8 @@ def detect_edges(img):
 
       res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
+  if lines is not None:
+      print('Plotting ', len(lines), ' lines.')
   return res
 
 def find_weather_presets():
