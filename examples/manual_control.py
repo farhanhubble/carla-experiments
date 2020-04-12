@@ -134,6 +134,7 @@ enable_ROI = False
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
 import numpy as np
+
 def cart2pol(x1,y1,x2,y2):
     # y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
     # (y1-y2)*x + (x2-x1)*y - y1(x2-x1)+x1(y2-y1) = 0 cf. Ax+By+C=0
@@ -158,7 +159,23 @@ def cluster_edges(lines,w,h):
     kmeans.fit(lines_parametric)
     return kmeans.labels_
     
+def detect_all_lanes(lines, cluster_ids):
+    end_points_cluster = [[] for _ in set(cluster_ids)]
+    for [line], cluster_id in zip(lines, cluster_ids):
+        end_points_cluster[cluster_id].append(line)
 
+    list_coeffs = []
+
+    for cluster in end_points_cluster:
+        flat_list_end_points = [item for sublist in cluster for item in sublist]
+        list_x_s = flat_list_end_points[0: len(flat_list_end_points): 2]
+        list_y_s = flat_list_end_points[1: len(flat_list_end_points): 2]
+
+        # Interpolate all the points
+        coeffs = np.polyfit(list_x_s, list_y_s, deg=1)
+        list_coeffs.append(coeffs)
+
+    return list_coeffs
 
 
 def detect_edges(img):
@@ -207,8 +224,14 @@ def detect_edges(img):
             print('Cluster',cluster_id,' has',np.sum(cluster_ids == cluster_id),' edges.')
         for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
               cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id] if cluster_id < len(_colors) else (255,255,255) , 2)
-               
-              
+
+      list_coeffs = detect_all_lanes(lines, cluster_ids)
+
+      for coeffs in list_coeffs:
+          line = np.poly1d(coeffs)
+          y_min = line(0)
+          y_max = line(width)
+          cv2.line(img_lines, (0, int(y_min)), (width, int(y_max)), (255, 255, 0), 2)
 
       for [start, end] in ROI_segments:
           cv2.line(img_lines, start, end, (255, 0, 0), 2)
