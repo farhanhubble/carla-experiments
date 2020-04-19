@@ -236,6 +236,8 @@ def detect_edges(img):
       for [start, end] in ROI_segments:
           cv2.line(img_lines, start, end, (255, 0, 0), 2)
 
+      img_lines = cv2.bitwise_and(img_lines, img_lines, mask=np.logical_not(ROI_mask).astype(np.uint8))
+
       res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
   else:
