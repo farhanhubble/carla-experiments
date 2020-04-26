@@ -186,10 +186,6 @@ def cluster_edges(lines,w,h):
                 else:
                     cluster_ids.append(1)
 
-    unique = len(set(cluster_ids))
-    if unique == 1:
-        cluster_ids = [0] * len(cluster_ids)
-    print(cluster_ids)
     return cluster_ids 
 
 
