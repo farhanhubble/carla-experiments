@@ -134,6 +134,11 @@ enable_ROI = False
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
 import numpy as np
+from Queue import Queue
+
+q_left = Queue(maxsize=3)
+q_right = Queue(maxsize=3)
+
 
 def cart2pol(x1,y1,x2,y2):
     # y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
@@ -154,20 +159,53 @@ def normalize_params(rho, theta, w, h):
 
 
 def cluster_edges(lines,w,h):
-    lines_parametric = list(map(lambda l: normalize_params(*cart2pol(*l[0]),w=w, h=h),lines))
-    kmeans = KMeans(random_state=0)
-    kmeans.fit(lines_parametric)
-    return kmeans.labels_
-    
-def detect_all_lanes(lines, cluster_ids):
-    end_points_cluster = [[] for _ in set(cluster_ids)]
-    for [line], cluster_id in zip(lines, cluster_ids):
+    cluster_ids = []
+    x_center = w//2
+
+    for [[x1, y1, x2, y2]] in lines:
+        if x1 <= x_center and x2 <= x_center:
+            cluster_ids.append(0)
+        elif x1 > x_center and x2 > x_center:
+            cluster_ids.append(1)
+
+        else:
+            if abs(x1 - x_center) > abs(x2 - x_center):
+                if x2 <= x_center:
+                    cluster_ids.append(0)
+                else:
+                    cluster_ids.append(1)
+
+            else:
+                if x1 <= x_center:
+                    cluster_ids.append(0)
+                else:
+                    cluster_ids.append(1)
+
+    #lines_parametric = list(map(lambda l: normalize_params(*cart2pol(*l[0]),w=w, h=h),lines))
+    #kmeans = KMeans(random_state=0, n_clusters = 2)
+    #kmeans.fit(lines_parametric)
+    unique = len(set(cluster_ids))
+    if unique == 1:
+        cluster_ids = [0] * len(cluster_ids)
+    print(cluster_ids)
+    return cluster_ids #kmeans.labels_
+
+import os
+
+def detect_all_lanes(lines, number_of_clusters):
+    end_points_cluster = [[] for _ in range(number_of_clusters)]
+
+    flattend_list_lines = [line for list_line in lines for line in list_line]
+
+    for (line, cluster_id) in flattend_list_lines:
+        #print("Detect_all_lines: ", (line, index))
         end_points_cluster[cluster_id].append(line)
 
     list_coeffs = []
 
     for cluster in end_points_cluster:
-        flat_list_end_points = [item for sublist in cluster for item in sublist]
+        flat_list_end_points = [item for [sublist] in cluster for item in sublist]
+        print("flat_list_end_points ***********", flat_list_end_points)
         list_x_s = flat_list_end_points[0: len(flat_list_end_points): 2]
         list_y_s = flat_list_end_points[1: len(flat_list_end_points): 2]
 
@@ -192,7 +230,7 @@ def detect_edges(img):
 
 
       ROI_xs = [extent_top[0], extent_bottom[0], extent_bottom[1], extent_top[1]]
-      ROI_ys = [int(0.5*height), height, height, int(0.5*height)]
+      ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
       ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
       ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
       ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
@@ -202,7 +240,20 @@ def detect_edges(img):
       cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
       img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
       lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
-              lines=None, threshold=20, minLineLength=3, maxLineGap=3)
+              lines=None, threshold=20, minLineLength=10, maxLineGap=3)
+
+      # Remove horizontal lines
+      theta_threshold = (np.pi/5)
+      new_lines = []
+
+      if lines is not None:
+          for line in lines:
+              rho, theta = cart2pol(*line[0])
+              if (theta >= -(np.pi/3)) or (theta <= -(np.pi*5/6)):
+                 new_lines.append(line)
+                 #print("theta is: ", theta * 180 / np.pi, "line is:", line)
+
+      lines = new_lines
 
       # print(ROI_segment_starts)
       # print(ROI_segment_ends)
@@ -217,15 +268,67 @@ def detect_edges(img):
       [0,0,0],         # black
       [127,127,127],   # grey
       [255,255,255]]   # white
-      if lines is not None:
-        cluster_ids = cluster_edges(lines, height, width)
-        print(len(set(cluster_ids)), 'clusters')
-        for cluster_id in set(cluster_ids):
-            print('Cluster',cluster_id,' has',np.sum(cluster_ids == cluster_id),' edges.')
-        for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
-              cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id] if cluster_id < len(_colors) else (255,255,255) , 2)
 
-      list_coeffs = detect_all_lanes(lines, cluster_ids)
+      if lines is not None:
+        cluster_ids = cluster_edges(lines, width, height)
+        print(len(set(cluster_ids)), 'clusters')
+
+        min = 1000
+        max = -1000
+        index_lines_in_cluster = [(min, max)] * len(set(cluster_ids))
+
+        for cluster_id in set(cluster_ids):
+            #print('Cluster',cluster_id,' has',np.sum(cluster_ids == cluster_id),' edges.')
+
+            for index in range(len(cluster_ids)):
+                if cluster_ids[index] == cluster_id:
+                    r, t = cart2pol(*lines[index][0])
+                    #print(index_lines_in_cluster[cluster_id])
+                    try:
+                        c_min, c_max = index_lines_in_cluster[cluster_id]
+                        if c_min > t:
+                            c_min = t
+                        if c_max < t:
+                            c_max = t
+                        index_lines_in_cluster[cluster_id] = (c_min, c_max)
+                    except IndexError:
+                        print("Index error: ", len(index_lines_in_cluster), cluster_id)
+
+        #print("Lines in cluster: ", "::", index_lines_in_cluster, "")
+
+        for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
+            cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id] if cluster_id < len(_colors) else (255,255,255) , 2)
+
+        left_lines = []
+        right_lines = []
+
+        for index in range(len(cluster_ids)):
+            if cluster_ids[index] == 0:
+                left_lines.append((lines[index], cluster_ids[index]))
+            else:
+                right_lines.append((lines[index], cluster_ids[index]))
+
+        if not q_right.full():
+            q_right.put(right_lines, block=False)
+        else:
+            q_right.get()
+            print(q_right.qsize(), list(q_right.queue))
+            q_right.put(right_lines)
+            print(q_right.qsize(), list(q_right.queue))
+
+        if not q_left.full():
+            q_left.put(left_lines, block=False)
+        else:
+            q_left.get()
+            print(q_left.qsize(), list(q_left.queue))
+            q_left.put(left_lines)
+            print(q_left.qsize(), list(q_left.queue))
+
+        lines = list(q_left.queue)
+        lines += list(q_right.queue)
+        #print("lines ============================", lines)
+
+      list_coeffs = detect_all_lanes(lines, 2)
 
       for coeffs in list_coeffs:
           line = np.poly1d(coeffs)
