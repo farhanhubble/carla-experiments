@@ -142,10 +142,12 @@ q_right = Queue(maxsize=3)
 
 
 def cart2pol(x1,y1,x2,y2):
-    # y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
-    # (y1-y2)*x + (x2-x1)*y - y1(x2-x1)+x1(y2-y1) = 0 cf. Ax+By+C=0
-    # Normal distance from origing rho = (A.0 + B.0 +C)/sqrt(A**2+B**2) = (-y1*(x2-x1)+x1*(y2-y1))/sqrt((y2-y1)**2 + (x2-x1)**2)
-    # Slope of the normal will be theta = pi/2-arctan((y2-y1)/(x2-x1))
+    """Find polar representation given end points of a line segment.
+    Equation of the line: y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
+    Compare with the standard equation: (y1-y2)*x + (x2-x1)*y - y1(x2-x1)+x1(y2-y1) = 0 cf. Ax+By+C=0
+    Normal distance from origin: rho = (A.0 + B.0 +C)/sqrt(A**2+B**2) = (-y1*(x2-x1)+x1*(y2-y1))/sqrt((y2-y1)**2 + (x2-x1)**2)
+    Slope of the normal: theta = pi/2-arctan((y2-y1)/(x2-x1))
+    """
     rho = (-y1*(x2-x1)+x1*(y2-y1))/np.sqrt((y2-y1)**2+(x2-x1)**2)
     theta = np.arctan((y2-y1)/(x2-x1)) - np.pi/2 if x2 != x1 else 0 
 
@@ -153,6 +155,8 @@ def cart2pol(x1,y1,x2,y2):
 
 
 def normalize_params(rho, theta, w, h):
+    """Normalize parameters of a line in to the range [0,1]
+    """
     normalized_theta = (theta + np.pi) / np.pi
     normalized_rho = rho/(np.sqrt(w**2+h**2)) + 1
 
@@ -191,7 +195,7 @@ def cluster_edges(lines,w,h):
     print(cluster_ids)
     return cluster_ids #kmeans.labels_
 
-import os
+
 
 def detect_all_lanes(lines, number_of_clusters):
     end_points_cluster = [[] for _ in range(number_of_clusters)]
