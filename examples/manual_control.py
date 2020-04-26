@@ -186,14 +186,11 @@ def cluster_edges(lines,w,h):
                 else:
                     cluster_ids.append(1)
 
-    #lines_parametric = list(map(lambda l: normalize_params(*cart2pol(*l[0]),w=w, h=h),lines))
-    #kmeans = KMeans(random_state=0, n_clusters = 2)
-    #kmeans.fit(lines_parametric)
     unique = len(set(cluster_ids))
     if unique == 1:
         cluster_ids = [0] * len(cluster_ids)
     print(cluster_ids)
-    return cluster_ids #kmeans.labels_
+    return cluster_ids 
 
 
 
