@@ -67,6 +67,8 @@ except IndexError:
 # ==============================================================================
 
 
+from queue import Queue
+
 import carla
 
 from carla import ColorConverter as cc
@@ -76,6 +78,7 @@ import collections
 import datetime
 import logging
 import math
+import numpy as np
 import random
 import re
 import weakref
@@ -133,8 +136,6 @@ enable_ROI = False
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
-import numpy as np
-from Queue import Queue
 
 q_left = Queue(maxsize=3)
 q_right = Queue(maxsize=3)
