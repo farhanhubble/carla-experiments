@@ -190,7 +190,25 @@ def cluster_edges(lines,w,h):
 
 
 
+def filter_by_slope(edges, min_slope, max_slope):
+
+    assert min_slope <= max_slope,\
+        print(f'min_slope {min_slope} is not <= max_slope {max_slope}')
+
+    def _get_theta(edge):
+        rho, theta = cart2pol(*edge[0])
+        return theta
+
+    if edges is not None:
+        # print('slopes:',list(slopes))
+        # print(f'min slope {min_slope} max slope {max_slope}')
+        return list(filter(lambda e : min_slope <= _get_theta(e) <= max_slope, edges))
+
+
+
+
 def detect_all_lanes(lines, number_of_clusters):
+    print('detect_all_lanes:',lines)
     end_points_cluster = [[] for _ in range(number_of_clusters)]
 
     flattend_list_lines = [line for list_line in lines for line in list_line]
@@ -215,87 +233,49 @@ def detect_all_lanes(lines, number_of_clusters):
 
 
 def detect_edges(img):
-  img_low_pass = cv2.GaussianBlur(img,(3,3),0)
-  img_canny = cv2.Canny(img_low_pass,100,200)
-  img_lines = np.zeros_like(img)
+    img_low_pass = cv2.GaussianBlur(img,(3,3),0)
+    img_canny = cv2.Canny(img_low_pass,100,200)
+    img_lines = np.zeros_like(img)
 
   # Region of interest is enable
-  if enable_ROI:
-      height, width = img.shape[0], img.shape[1]
-      center_y = int(width // 2)
-      extent_bottom = (center_y-int(width*0.45), center_y+int(width*0.45))
-      extent_top    = (center_y-int(width*0.08), center_y+int(width*0.08))
+    if enable_ROI:
+        height, width = img.shape[0], img.shape[1]
+        center_y = int(width // 2)
+        extent_bottom = (center_y-int(width*0.45), center_y+int(width*0.45))
+        extent_top    = (center_y-int(width*0.08), center_y+int(width*0.08))
 
 
-      ROI_xs = [extent_top[0], extent_bottom[0], extent_bottom[1], extent_top[1]]
-      ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
-      ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
-      ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
-      ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
+        ROI_xs = [extent_top[0], extent_bottom[0], extent_bottom[1], extent_top[1]]
+        ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
+        ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
+        ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
+        ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
 
-      ROI_mask = np.ones_like(img_canny)
-      #ROI_mask[int(len(ROI_mask)//3):] = 1
-      cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
-      img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
-      lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
-              lines=None, threshold=20, minLineLength=10, maxLineGap=3)
+        ROI_mask = np.ones_like(img_canny)
+        #ROI_mask[int(len(ROI_mask)//3):] = 1
+        cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
+        img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
+        lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
+                lines=None, threshold=20, minLineLength=10, maxLineGap=3)
 
-      # Remove horizontal lines
-      theta_threshold = (np.pi/5)
-      new_lines = []
+        
 
-      if lines is not None:
-          for line in lines:
-              rho, theta = cart2pol(*line[0])
-              if (theta >= -(np.pi/3)) or (theta <= -(np.pi*5/6)):
-                 new_lines.append(line)
-                 #print("theta is: ", theta * 180 / np.pi, "line is:", line)
+        # Remove horizontal lines
+        theta_threshold = np.pi/3
+        filtered_lines = filter_by_slope(lines, -np.pi, -np.pi+theta_threshold)
+        filtered_lines += filter_by_slope(lines, 0-theta_threshold, 0)
 
-      lines = new_lines
+        lines = filtered_lines
+        _colors= [[255,0,0],       # red
+        [255,165,0]]               # orange
 
-      # print(ROI_segment_starts)
-      # print(ROI_segment_ends)
-      # print(list(ROI_segments),'\n')
-      _colors= [[255,0,0],       # red
-      [255,165,0],     # orange
-      [255,255,0],     # yellow
-      [0,255,0],       # green
-      [0,0,255],       # blue
-      [75,0,130],      # indigo
-      [238,130,238],   # violet
-      [0,0,0],         # black
-      [127,127,127],   # grey
-      [255,255,255]]   # white
 
-      if lines is not None:
-        cluster_ids = cluster_edges(lines, width, height)
-        print(len(set(cluster_ids)), 'clusters')
-
-        min = 1000
-        max = -1000
-        index_lines_in_cluster = [(min, max)] * len(set(cluster_ids))
-
-        for cluster_id in set(cluster_ids):
-            #print('Cluster',cluster_id,' has',np.sum(cluster_ids == cluster_id),' edges.')
-
-            for index in range(len(cluster_ids)):
-                if cluster_ids[index] == cluster_id:
-                    r, t = cart2pol(*lines[index][0])
-                    #print(index_lines_in_cluster[cluster_id])
-                    try:
-                        c_min, c_max = index_lines_in_cluster[cluster_id]
-                        if c_min > t:
-                            c_min = t
-                        if c_max < t:
-                            c_max = t
-                        index_lines_in_cluster[cluster_id] = (c_min, c_max)
-                    except IndexError:
-                        print("Index error: ", len(index_lines_in_cluster), cluster_id)
-
-        #print("Lines in cluster: ", "::", index_lines_in_cluster, "")
+        if lines is not None:
+            cluster_ids = cluster_edges(lines, width, height)
+            print(len(set(cluster_ids)), 'clusters')
 
         for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
-            cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id] if cluster_id < len(_colors) else (255,255,255) , 2)
+            cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id], 2)
 
         left_lines = []
         right_lines = []
@@ -307,52 +287,47 @@ def detect_edges(img):
                 right_lines.append((lines[index], cluster_ids[index]))
 
         if not q_right.full():
-            q_right.put(right_lines, block=False)
+            q_right.put(right_lines)
         else:
             q_right.get()
-            print(q_right.qsize(), list(q_right.queue))
             q_right.put(right_lines)
-            print(q_right.qsize(), list(q_right.queue))
 
         if not q_left.full():
-            q_left.put(left_lines, block=False)
+            q_left.put(left_lines)
         else:
             q_left.get()
-            print(q_left.qsize(), list(q_left.queue))
             q_left.put(left_lines)
-            print(q_left.qsize(), list(q_left.queue))
 
         lines = list(q_left.queue)
         lines += list(q_right.queue)
-        #print("lines ============================", lines)
 
-      list_coeffs = detect_all_lanes(lines, 2)
+        list_coeffs = detect_all_lanes(lines, 2)
 
-      for coeffs in list_coeffs:
-          line = np.poly1d(coeffs)
-          y_min = line(0)
-          y_max = line(width)
-          cv2.line(img_lines, (0, int(y_min)), (width, int(y_max)), (255, 255, 0), 2)
+        for coeffs in list_coeffs:
+            line = np.poly1d(coeffs)
+            y_min = line(0)
+            y_max = line(width)
+            cv2.line(img_lines, (0, int(y_min)), (width, int(y_max)), (255, 255, 0), 2)
 
-      for [start, end] in ROI_segments:
-          cv2.line(img_lines, start, end, (255, 0, 0), 2)
+        for [start, end] in ROI_segments:
+            cv2.line(img_lines, start, end, (255, 0, 0), 2)
 
-      img_lines = cv2.bitwise_and(img_lines, img_lines, mask=np.logical_not(ROI_mask).astype(np.uint8))
+        img_lines = cv2.bitwise_and(img_lines, img_lines, mask=np.logical_not(ROI_mask).astype(np.uint8))
 
-      res = cv2.addWeighted(img, 1, img_lines, 1, 0)
+        res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
-  else:
-      lines = cv2.HoughLinesP(image=img_canny, rho=3, theta=np.pi / 36.0,
-                              lines=None, threshold=20, minLineLength=3, maxLineGap=3)
-      for [[x1, y1, x2, y2]] in lines:
-          cv2.line(img_lines, (x1, y1), (x2, y2), (255, 255, 255), 2)
+    else:
+        lines = cv2.HoughLinesP(image=img_canny, rho=3, theta=np.pi / 36.0,
+                                lines=None, threshold=20, minLineLength=3, maxLineGap=3)
+        for [[x1, y1, x2, y2]] in lines:
+            cv2.line(img_lines, (x1, y1), (x2, y2), (255, 255, 255), 2)
 
 
-      res = cv2.addWeighted(img, 1, img_lines, 1, 0)
+        res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
-  if lines is not None:
-      print('Plotting ', len(lines), ' lines.')
-  return res
+    if lines is not None:
+        print('Plotting ', len(lines), ' lines.')
+    return res
 
 def find_weather_presets():
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
