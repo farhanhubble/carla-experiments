@@ -222,6 +222,16 @@ def detect_lanes(lines):
     return coeffs
 
 
+def get_hough_lines(*args,**kwargs):
+    lines =  cv2.HoughLinesP(*args, **kwargs)
+    if list:
+        lines = [line for [line] in lines]
+    return lines
+"""
+TODO: Remove global queues.
+TODO: 
+"""
+
 def detect_edges(img):
     img_low_pass = cv2.GaussianBlur(img,(3,3),0)
     img_canny = cv2.Canny(img_low_pass,100,200)
@@ -262,7 +272,6 @@ def detect_edges(img):
 
         if lines is not None:
             cluster_ids = cluster_edges(lines, width, height)
-            print(len(set(cluster_ids)), 'clusters')
 
         for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
             cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id], 2)
