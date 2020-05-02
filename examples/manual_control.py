@@ -207,29 +207,19 @@ def filter_by_slope(edges, min_slope, max_slope):
 
 
 
-def detect_all_lanes(lines, number_of_clusters):
+def detect_lanes(lines):
     print('detect_all_lanes:',lines)
-    end_points_cluster = [[] for _ in range(number_of_clusters)]
 
-    flattend_list_lines = [line for list_line in lines for line in list_line]
 
-    for (line, cluster_id) in flattend_list_lines:
-        #print("Detect_all_lines: ", (line, index))
-        end_points_cluster[cluster_id].append(line)
+    flattend_list_lines = [z for line_and_cluster in lines for [line], cluster_id in line_and_cluster for z in line]
+    list_xs = flattend_list_lines[0: len(flattend_list_lines): 2]
+    list_ys = flattend_list_lines[1: len(flattend_list_lines): 2]
+    print('Endpoints', list_xs, list_ys)
 
-    list_coeffs = []
+    # Interpolate all the points
+    coeffs = np.polyfit(list_xs, list_ys, deg=1)
 
-    for cluster in end_points_cluster:
-        flat_list_end_points = [item for [sublist] in cluster for item in sublist]
-        print("flat_list_end_points ***********", flat_list_end_points)
-        list_x_s = flat_list_end_points[0: len(flat_list_end_points): 2]
-        list_y_s = flat_list_end_points[1: len(flat_list_end_points): 2]
-
-        # Interpolate all the points
-        coeffs = np.polyfit(list_x_s, list_y_s, deg=1)
-        list_coeffs.append(coeffs)
-
-    return list_coeffs
+    return coeffs
 
 
 def detect_edges(img):
@@ -298,12 +288,13 @@ def detect_edges(img):
             q_left.get()
             q_left.put(left_lines)
 
-        lines = list(q_left.queue)
-        lines += list(q_right.queue)
+        left_edges  = list(q_left.queue)
+        right_edges = list(q_right.queue)
 
-        list_coeffs = detect_all_lanes(lines, 2)
+        coeffs_left_lines = detect_lanes(left_edges)
+        coeffs_right_lines = detect_lanes(right_edges)
 
-        for coeffs in list_coeffs:
+        for coeffs in [coeffs_left_lines, coeffs_right_lines]:
             line = np.poly1d(coeffs)
             y_min = line(0)
             y_max = line(width)
