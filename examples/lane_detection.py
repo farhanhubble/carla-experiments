@@ -130,9 +130,9 @@ class SimpleLaneDector(object):
             ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
             ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
 
-            ROI_mask = np.ones_like(img_canny)
-            cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
-            img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
+            ROI_mask = np.zeros_like(img_canny)
+            cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=1)
+            img_canny_with_ROI = cv2.bitwise_and(img_canny,img_canny, mask=ROI_mask)
             lines = self.get_hough_lines(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
                     lines=None, threshold=20, minLineLength=10, maxLineGap=3)
 
@@ -190,7 +190,7 @@ class SimpleLaneDector(object):
             for [start, end] in ROI_segments:
                 cv2.line(img_lines, start, end, (255, 0, 0), 2)
 
-            img_lines = cv2.bitwise_and(img_lines, img_lines, mask=np.logical_not(ROI_mask).astype(np.uint8))
+            img_lines = cv2.bitwise_and(img_lines, img_lines, mask=ROI_mask)
 
             res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
