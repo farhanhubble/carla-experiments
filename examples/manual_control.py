@@ -167,7 +167,7 @@ def cluster_edges(lines,w,h):
     cluster_ids = []
     x_center = w//2
 
-    for [[x1, y1, x2, y2]] in lines:
+    for [x1, y1, x2, y2] in lines:
         if x1 <= x_center and x2 <= x_center:
             cluster_ids.append(0)
         elif x1 > x_center and x2 > x_center:
@@ -196,7 +196,7 @@ def filter_by_slope(edges, min_slope, max_slope):
         print(f'min_slope {min_slope} is not <= max_slope {max_slope}')
 
     def _get_theta(edge):
-        rho, theta = cart2pol(*edge[0])
+        rho, theta = cart2pol(*edge)
         return theta
 
     if edges is not None:
@@ -211,7 +211,7 @@ def detect_lanes(lines):
     print('detect_all_lanes:',lines)
 
 
-    flattend_list_lines = [z for line_and_cluster in lines for [line], cluster_id in line_and_cluster for z in line]
+    flattend_list_lines = [z for line_and_cluster in lines for line, cluster_id in line_and_cluster for z in line]
     list_xs = flattend_list_lines[0: len(flattend_list_lines): 2]
     list_ys = flattend_list_lines[1: len(flattend_list_lines): 2]
     print('Endpoints', list_xs, list_ys)
@@ -255,7 +255,7 @@ def detect_edges(img):
         #ROI_mask[int(len(ROI_mask)//3):] = 1
         cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
         img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
-        lines = cv2.HoughLinesP(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
+        lines = get_hough_lines(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
                 lines=None, threshold=20, minLineLength=10, maxLineGap=3)
 
         
@@ -273,7 +273,7 @@ def detect_edges(img):
         if lines is not None:
             cluster_ids = cluster_edges(lines, width, height)
 
-        for [[x1, y1, x2, y2]],cluster_id in zip(lines,cluster_ids):
+        for [x1, y1, x2, y2],cluster_id in zip(lines,cluster_ids):
             cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id], 2)
 
         left_lines = []
@@ -317,9 +317,9 @@ def detect_edges(img):
         res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
     else:
-        lines = cv2.HoughLinesP(image=img_canny, rho=3, theta=np.pi / 36.0,
+        lines = get_hough_lines(image=img_canny, rho=3, theta=np.pi / 36.0,
                                 lines=None, threshold=20, minLineLength=3, maxLineGap=3)
-        for [[x1, y1, x2, y2]] in lines:
+        for [x1, y1, x2, y2] in lines:
             cv2.line(img_lines, (x1, y1), (x2, y2), (255, 255, 255), 2)
 
 
