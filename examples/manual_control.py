@@ -47,8 +47,6 @@ from __future__ import print_function
 # ==============================================================================
 # -- find carla module ---------------------------------------------------------
 # ==============================================================================
-from sklearn.cluster import KMeans
-import cv2
 import glob
 import os
 import sys
@@ -66,12 +64,10 @@ except IndexError:
 # -- imports -------------------------------------------------------------------
 # ==============================================================================
 
-
-from queue import Queue
-
 import carla
 
 from carla import ColorConverter as cc
+from lane_detection import SimpleLaneDector
 
 import argparse
 import collections
@@ -125,209 +121,10 @@ except ImportError:
     raise RuntimeError('cannot import numpy, make sure numpy package is installed')
 
 
-
-# ==============================================================================
-# -- Global Flag ----------------------------------------------------------
-# ==============================================================================
-
-enable_edges = False
-enable_ROI = False
-
 # ==============================================================================
 # -- Global functions ----------------------------------------------------------
 # ==============================================================================
 
-q_left = Queue(maxsize=3)
-q_right = Queue(maxsize=3)
-
-
-def cart2pol(x1,y1,x2,y2):
-    """Find polar representation given end points of a line segment.
-    Equation of the line: y-y1 = ((y2-y1)/(x2-x1))*(x-x1)
-    Compare with the standard equation: (y1-y2)*x + (x2-x1)*y - y1(x2-x1)+x1(y2-y1) = 0 cf. Ax+By+C=0
-    Normal distance from origin: rho = (A.0 + B.0 +C)/sqrt(A**2+B**2) = (-y1*(x2-x1)+x1*(y2-y1))/sqrt((y2-y1)**2 + (x2-x1)**2)
-    Slope of the normal: theta = pi/2-arctan((y2-y1)/(x2-x1))
-    """
-    rho = (-y1*(x2-x1)+x1*(y2-y1))/np.sqrt((y2-y1)**2+(x2-x1)**2)
-    theta = np.arctan((y2-y1)/(x2-x1)) - np.pi/2 if x2 != x1 else 0 
-
-    return rho,theta
-
-
-def normalize_params(rho, theta, w, h):
-    """Normalize parameters of a line in to the range [0,1]
-    """
-    normalized_theta = (theta + np.pi) / np.pi
-    normalized_rho = rho/(np.sqrt(w**2+h**2)) + 1
-
-    return normalized_rho, normalized_theta
-
-
-def cluster_edges(lines,w,h):
-    cluster_ids = []
-    x_center = w//2
-
-    for [x1, y1, x2, y2] in lines:
-        if x1 <= x_center and x2 <= x_center:
-            cluster_ids.append(0)
-        elif x1 > x_center and x2 > x_center:
-            cluster_ids.append(1)
-
-        else:
-            if abs(x1 - x_center) > abs(x2 - x_center):
-                if x2 <= x_center:
-                    cluster_ids.append(0)
-                else:
-                    cluster_ids.append(1)
-
-            else:
-                if x1 <= x_center:
-                    cluster_ids.append(0)
-                else:
-                    cluster_ids.append(1)
-
-    return cluster_ids 
-
-
-
-def filter_by_slope(edges, min_slope, max_slope):
-
-    assert min_slope <= max_slope,\
-        print(f'min_slope {min_slope} is not <= max_slope {max_slope}')
-
-    def _get_theta(edge):
-        rho, theta = cart2pol(*edge)
-        return theta
-
-    if edges is not None:
-        # print('slopes:',list(slopes))
-        # print(f'min slope {min_slope} max slope {max_slope}')
-        return list(filter(lambda e : min_slope <= _get_theta(e) <= max_slope, edges))
-
-
-
-
-def detect_lanes(lines):
-    print('detect_all_lanes:',lines)
-
-
-    flattend_list_lines = [z for line_and_cluster in lines for line, cluster_id in line_and_cluster for z in line]
-    list_xs = flattend_list_lines[0: len(flattend_list_lines): 2]
-    list_ys = flattend_list_lines[1: len(flattend_list_lines): 2]
-    print('Endpoints', list_xs, list_ys)
-
-    # Interpolate all the points
-    coeffs = np.polyfit(list_xs, list_ys, deg=1)
-
-    return coeffs
-
-
-def get_hough_lines(*args,**kwargs):
-    lines =  cv2.HoughLinesP(*args, **kwargs)
-    if list:
-        lines = [line for [line] in lines]
-    return lines
-"""
-TODO: Remove global queues.
-TODO: 
-"""
-
-def detect_edges(img):
-    img_low_pass = cv2.GaussianBlur(img,(3,3),0)
-    img_canny = cv2.Canny(img_low_pass,100,200)
-    img_lines = np.zeros_like(img)
-
-    # Region of interest is enabled
-    if enable_ROI:
-        height, width = img.shape[0], img.shape[1]
-        center_y = int(width // 2)
-        extent_bottom = (center_y-int(width*0.45), center_y+int(width*0.45))
-        extent_top    = (center_y-int(width*0.08), center_y+int(width*0.08))
-
-
-        ROI_xs = [extent_top[0], extent_bottom[0], extent_bottom[1], extent_top[1]]
-        ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
-        ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
-        ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
-        ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
-
-        ROI_mask = np.ones_like(img_canny)
-        #ROI_mask[int(len(ROI_mask)//3):] = 1
-        cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=0)
-        img_canny_with_ROI = np.logical_and(img_canny,np.logical_not(ROI_mask)).astype(np.uint8)
-        lines = get_hough_lines(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
-                lines=None, threshold=20, minLineLength=10, maxLineGap=3)
-
-        
-
-        # Remove horizontal lines
-        theta_threshold = np.pi/3
-        filtered_lines = filter_by_slope(lines, -np.pi, -np.pi+theta_threshold)
-        filtered_lines += filter_by_slope(lines, 0-theta_threshold, 0)
-
-        lines = filtered_lines
-        _colors= [[255,0,0],       # red
-        [255,165,0]]               # orange
-
-
-        if lines is not None:
-            cluster_ids = cluster_edges(lines, width, height)
-
-        for [x1, y1, x2, y2],cluster_id in zip(lines,cluster_ids):
-            cv2.line(img_lines, (x1, y1), (x2, y2), _colors[cluster_id], 2)
-
-        left_lines = []
-        right_lines = []
-
-        for index in range(len(cluster_ids)):
-            if cluster_ids[index] == 0:
-                left_lines.append((lines[index], cluster_ids[index]))
-            else:
-                right_lines.append((lines[index], cluster_ids[index]))
-
-        if not q_right.full():
-            q_right.put(right_lines)
-        else:
-            q_right.get()
-            q_right.put(right_lines)
-
-        if not q_left.full():
-            q_left.put(left_lines)
-        else:
-            q_left.get()
-            q_left.put(left_lines)
-
-        left_edges  = list(q_left.queue)
-        right_edges = list(q_right.queue)
-
-        coeffs_left_lines = detect_lanes(left_edges)
-        coeffs_right_lines = detect_lanes(right_edges)
-
-        for coeffs in [coeffs_left_lines, coeffs_right_lines]:
-            line = np.poly1d(coeffs)
-            y_min = line(0)
-            y_max = line(width)
-            cv2.line(img_lines, (0, int(y_min)), (width, int(y_max)), (255, 255, 0), 2)
-
-        for [start, end] in ROI_segments:
-            cv2.line(img_lines, start, end, (255, 0, 0), 2)
-
-        img_lines = cv2.bitwise_and(img_lines, img_lines, mask=np.logical_not(ROI_mask).astype(np.uint8))
-
-        res = cv2.addWeighted(img, 1, img_lines, 1, 0)
-
-    else:
-        lines = get_hough_lines(image=img_canny, rho=3, theta=np.pi / 36.0,
-                                lines=None, threshold=20, minLineLength=3, maxLineGap=3)
-        for [x1, y1, x2, y2] in lines:
-            cv2.line(img_lines, (x1, y1), (x2, y2), (255, 255, 255), 2)
-
-
-        res = cv2.addWeighted(img, 1, img_lines, 1, 0)
-
-    if lines is not None:
-        print('Plotting ', len(lines), ' lines.')
-    return res
 
 def find_weather_presets():
     rgx = re.compile('.+?(?:(?<=[a-z])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])|$)')
@@ -339,6 +136,7 @@ def find_weather_presets():
 def get_actor_display_name(actor, truncate=250):
     name = ' '.join(actor.type_id.replace('_', '.').title().split('.')[1:])
     return (name[:truncate - 1] + u'\u2026') if len(name) > truncate else name
+
 
 
 # ==============================================================================
@@ -525,18 +323,10 @@ class KeyboardControl(object):
                         world.hud.notification('Autopilot %s' % ('On' if self._autopilot_enabled else 'Off'))
 
                     elif event.key == K_z:
-                        global enable_edges
-                        if not enable_edges:
-                            enable_edges = True
-                        else:
-                            enable_edges = False
+                        world.camera_manager.lane_detector.toggle_edge_detection()
 
                     elif event.key == K_i:
-                        global enable_ROI
-                        if not enable_ROI:
-                            enable_ROI = True
-                        else:
-                            enable_ROI = False
+                        world.camera_manager.lane_detector.toggle_ROI()
 
         if not self._autopilot_enabled:
             if isinstance(self._control, carla.VehicleControl):
@@ -904,6 +694,7 @@ class CameraManager(object):
                 bp.set_attribute('range', '5000')
             item.append(bp)
         self.index = None
+        self.lane_detector = SimpleLaneDector()
 
     def toggle_camera(self):
         self.transform_index = (self.transform_index + 1) % len(self._camera_transforms)
@@ -966,8 +757,8 @@ class CameraManager(object):
             array = array[:, :, :3]
             array = array[:, :, ::-1]
 
-            if enable_edges:
-                array = detect_edges(array)
+            if self.lane_detector.enable_edges:
+                array = self.lane_detector.detect_lanes(array)
             self.surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
         if self.recording:
             image.save_to_disk('_out/%08d' % image.frame_number)
