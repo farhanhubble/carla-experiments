@@ -112,8 +112,6 @@ class SimpleLaneDector(object):
     """
 
     def detect_lanes(self,img):
-        img_low_pass = cv2.GaussianBlur(img,(3,3),0)
-        img_canny = cv2.Canny(img_low_pass,100,200)
         img_lines = np.zeros_like(img)
 
         # Region of interest is enabled
@@ -128,15 +126,21 @@ class SimpleLaneDector(object):
             ROI_ys = [int(0.6*height), height, height, int(0.6*height)]
             ROI_segment_starts = list(zip(ROI_xs, ROI_ys))
             ROI_segment_ends   = ROI_segment_starts[1:] + [ROI_segment_starts[0]]
-            ROI_segments = zip(ROI_segment_starts, ROI_segment_ends)
+            ROI_segments = list(zip(ROI_segment_starts, ROI_segment_ends))
 
-            ROI_mask = np.zeros_like(img_canny)
-            cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=1)
-            img_canny_with_ROI = cv2.bitwise_and(img_canny,img_canny, mask=ROI_mask)
-            lines = self.get_hough_lines(image=img_canny_with_ROI, rho=3,theta=np.pi/36.0,
+            ROI_mask = np.zeros_like(img)
+            cv2.fillPoly(ROI_mask, np.array([ROI_segment_starts], dtype=np.int32), color=[1, 1, 1])
+
+            img_with_ROI = cv2.copyTo(img, mask=ROI_mask)
+
+            img_low_pass = cv2.GaussianBlur(img_with_ROI, (3, 3), 0)
+            img_canny = cv2.Canny(img_low_pass, 100, 200)
+
+            for [start, end] in ROI_segments:
+                cv2.line(img_canny, start, end, (0, 0, 0), 3)
+
+            lines = self.get_hough_lines(image=img_canny, rho=3,theta=np.pi/36.0,
                     lines=None, threshold=20, minLineLength=10, maxLineGap=3)
-
-            
 
             # Remove horizontal lines
             theta_threshold = np.pi/3
@@ -144,9 +148,8 @@ class SimpleLaneDector(object):
             filtered_lines += self.filter_by_slope(lines, 0-theta_threshold, 0)
 
             lines = filtered_lines
-            _colors= [[255,0,0],       # red
-            [255,165,0]]               # orange
-
+            _colors= [[0,0,255],       # red
+            [0,255,0]]               # orange
 
             if lines is not None:
                 cluster_ids = self.cluster_edges(lines, width, height)
@@ -188,13 +191,15 @@ class SimpleLaneDector(object):
                 cv2.line(img_lines, (0, int(y_min)), (width, int(y_max)), (255, 255, 0), 2)
 
             for [start, end] in ROI_segments:
-                cv2.line(img_lines, start, end, (255, 0, 0), 2)
+                cv2.line(img_lines, start, end, (255, 0, 0), 5)
 
-            img_lines = cv2.bitwise_and(img_lines, img_lines, mask=ROI_mask)
+            img_lines = cv2.copyTo(img_lines, mask=ROI_mask)
 
             res = cv2.addWeighted(img, 1, img_lines, 1, 0)
 
         else:
+            img_low_pass = cv2.GaussianBlur(img, (3, 3), 0)
+            img_canny = cv2.Canny(img_low_pass, 100, 200)
             lines = self.get_hough_lines(image=img_canny, rho=3, theta=np.pi / 36.0,
                                     lines=None, threshold=20, minLineLength=3, maxLineGap=3)
             for [x1, y1, x2, y2] in lines:
