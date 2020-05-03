@@ -237,7 +237,7 @@ def detect_edges(img):
     img_canny = cv2.Canny(img_low_pass,100,200)
     img_lines = np.zeros_like(img)
 
-  # Region of interest is enable
+    # Region of interest is enabled
     if enable_ROI:
         height, width = img.shape[0], img.shape[1]
         center_y = int(width // 2)
