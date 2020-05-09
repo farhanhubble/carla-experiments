@@ -6,6 +6,22 @@ import numpy as np
 
 
 class SimpleLaneDector(object):
+    """ Simple, straight-line edge detection based on Canny edge detection, 
+    Hough transform, clustering and smoothing over frames.
+    TODO: Document the ROI application better.
+    TODO: More speed gains, can parallellize parts of the pipeline over 
+    two halves of the image. 
+    TODO: Try RANSAC for 
+    https://bit.ly/ransac-kalman
+
+    TODO: Temporal blurring 
+    TODO: Guard against abrupt changes in lane position.
+    TODO: Vanishing point stabilization.
+    TODO: How can better SLAM help?
+    TODO: how can depth (Lidar/Stereo vision) help?
+    TODO: How can motion and optical flow help?
+    TODO: How can semantic segmentation help?
+    """
 
     def __init__(self):
         self.enable_edges = False
